@@ -8,26 +8,34 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adampointer/restservice/data"
 	"github.com/adampointer/restservice/handlers"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
 
-func routes() *mux.Router {
+func routes(h handlers.Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/payments", handlers.GetPayments).Methods("GET")
-	router.HandleFunc("/payments/{id}", handlers.GetPayment).Methods("GET")
-	router.HandleFunc("/payments/{id}", handlers.CreatePayment).Methods("PUT")
-	router.HandleFunc("/payments/{id}", handlers.UpdatePayment).Methods("POST")
-	router.HandleFunc("/payments/{id}", handlers.DeletePayment).Methods("DELETE")
+	router.HandleFunc("/payments", h.GetAll).Methods("GET")
+	router.HandleFunc("/payments/{id}", h.GetOne).Methods("GET")
+	router.HandleFunc("/payments/{id}", h.Create).Methods("PUT")
+	router.HandleFunc("/payments/{id}", h.Update).Methods("POST")
+	router.HandleFunc("/payments/{id}", h.Delete).Methods("DELETE")
 	return router
 }
 
 func listenTCP(stop chan bool, errs chan error) {
+	// The db path and listen address should really be from flags/config
+	dbClient, err := data.NewClient("data.db")
+	if err != nil {
+		log.Fatalf("unable to initialise database: %s", err)
+	}
+	defer dbClient.Close()
+	paymentsHandler := handlers.NewPayments(dbClient)
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: routes(),
+		Handler: routes(paymentsHandler),
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
@@ -51,7 +59,7 @@ func main() {
 	signal.Notify(terminate, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 
 	// Listen in a new goroutine
-	log.Info("starting HTTP server")
+	log.Info("starting HTTP server on :8080")
 	stop := make(chan bool)
 	errs := make(chan error)
 	go listenTCP(stop, errs)
