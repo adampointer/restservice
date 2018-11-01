@@ -1,6 +1,10 @@
 package data
 
-import "github.com/asdine/storm"
+import (
+	"fmt"
+
+	"github.com/asdine/storm"
+)
 
 // Client abstracts our database
 type Client struct {
@@ -26,6 +30,11 @@ func (c *Client) Close() {
 	c.db.Close()
 }
 
+// Path returns the db path
+func (c *Client) Path() string {
+	return c.dbPath
+}
+
 // FetchPayment gets a single Payment by ID
 func (c *Client) FetchPayment(id string) (*Payment, error) {
 	var pmt Payment
@@ -46,6 +55,10 @@ func (c *Client) FetchAllPayments() ([]*Payment, error) {
 
 // CreatePayment saves a new Payment in the database
 func (c *Client) CreatePayment(pmt *Payment) error {
+	_, err := c.FetchPayment(pmt.ID)
+	if err == nil || err.Error() != "not found" {
+		return fmt.Errorf("resource exists")
+	}
 	return c.db.Save(pmt)
 }
 
@@ -55,6 +68,10 @@ func (c *Client) UpdatePayment(pmt *Payment) error {
 }
 
 // DeletePayment deletes an existing Payment from the database
-func (c *Client) DeletePayment(pmt *Payment) error {
+func (c *Client) DeletePayment(id string) error {
+	pmt, err := c.FetchPayment(id)
+	if err != nil {
+		return err
+	}
 	return c.db.DeleteStruct(pmt)
 }

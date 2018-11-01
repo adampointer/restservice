@@ -25,8 +25,8 @@ type PaymentAttributes struct {
 	DebtorParty          *PaymentParty   `json:"debtor_party"`
 	EtoEReference        string          `json:"end_to_end_reference"`
 	FX                   *PaymentFXData  `json:"fx"`
-	NumericReference     json.Number     `json:"numeric_reference"`
-	PaymentID            json.Number     `json:"payment_id"`
+	NumericReference     json.Number     `json:"numeric_reference",storm:"unique"`
+	PaymentID            json.Number     `json:"payment_id",storm:"unique"`
 	PaymentPurpose       string          `json:"payment_purpose"`
 	PaymentScheme        string          `json:"payment_scheme"`
 	PaymentType          string          `json:"payment_type"`
