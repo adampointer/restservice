@@ -54,6 +54,10 @@ func (p *Payments) GetOne(w http.ResponseWriter, r *http.Request) {
 func (p *Payments) Create(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	var payment data.Payment
+	if r.Body == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	if err := json.NewDecoder(r.Body).Decode(&payment); err != nil {
 		log.Errorf("Error decoding create payment request: %s", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -80,6 +84,10 @@ func (p *Payments) Create(w http.ResponseWriter, r *http.Request) {
 func (p *Payments) Update(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	var payment data.Payment
+	if r.Body == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	if err := json.NewDecoder(r.Body).Decode(&payment); err != nil {
 		log.Errorf("Error decoding update payment request: %s", err)
 		w.WriteHeader(http.StatusBadRequest)

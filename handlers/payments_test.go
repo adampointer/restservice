@@ -56,7 +56,27 @@ func TestGetAllPaymentsEmpty(t *testing.T) {
 	}
 }
 
-func TestCreateThenGetAllPayments(t *testing.T) {
+func TestGetPaymentNotFound(t *testing.T) {
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	req, err := http.NewRequest("GET", "/payments/foobar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.GetOne)
+	router.ServeHTTP(rr, req)
+
+	// Assert that a GET to /payments/{ID} with an invalid id returns 404
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusNotFound)
+	}
+}
+
+func TestCreatePaymentThenGetAllPayments(t *testing.T) {
 	id := "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43"
 
 	db := getTestDB(t)
@@ -106,69 +126,275 @@ func TestCreateThenGetAllPayments(t *testing.T) {
 	}
 }
 
-func TestCreateDuplicateID(t *testing.T) {}
-func TestCreateNoID(t *testing.T)        {}
-func TestCreateEmptyBody(t *testing.T)   {}
+func TestCreatePaymentThenGetPayment(t *testing.T) {
+	id := "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43"
 
-var exampleJSON = `{
-	"type": "Payment",
-	"id": "",
-	"version": 0,
-	"organisation_id": "743d5b63-8e6f-432e-a8fa-c5d8d2ee5fcb",
-	"attributes": {
-		"amount": "100.21",
-		"beneficiary_party": {
-			"account_name": "W Owens",
-			"account_number": "31926819",
-			"account_number_code": "BBAN",
-			"account_type": 0,
-			"address": "1 The Beneficiary Localtown SE2",
-			"bank_id": "403000",
-			"bank_id_code": "GBDSC",
-			"name": "Wilfred Jeremiah Owens"
-		},
-		"charges_information": {
-			"bearer_code": "SHAR",
-			"sender_charges": [{
-				"amount": "5.00",
-				"currency": "GBP"
-			}, {
-				"amount": "10.00",
-				"currency": "USD"
-			}],
-			"receiver_charges_amount": "1.00",
-			"receiver_charges_currency": "USD"
-		},
-		"currency": "GBP",
-		"debtor_party": {
-			"account_name": "EJ Brown Black",
-			"account_number": "GB29XABC10161234567801",
-			"account_number_code": "IBAN",
-			"address": "10 Debtor Crescent Sourcetown NE1",
-			"bank_id": "203301",
-			"bank_id_code": "GBDSC",
-			"name": "Emelia Jane Brown"
-		},
-		"end_to_end_reference": "Wil piano Jan",
-		"fx": {
-			"contract_reference": "FX123",
-			"exchange_rate": "2.00000",
-			"original_amount": "200.42",
-			"original_currency": "USD"
-		},
-		"numeric_reference": "1002001",
-		"payment_id": "123456789012345678",
-		"payment_purpose": "Paying for goods/services",
-		"payment_scheme": "FPS",
-		"payment_type": "Credit",
-		"processing_date": "2017-01-18",
-		"reference": "Payment for Em's piano lessons",
-		"scheme_payment_sub_type": "InternetBanking",
-		"scheme_payment_type": "ImmediatePayment",
-		"sponsor_party": {
-			"account_number": "56781234",
-			"bank_id": "123123",
-			"bank_id_code": "GBDSC"
-		}
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	// First, assert a unique resource is created
+	req, err := http.NewRequest("PUT", "/payments/"+id, strings.NewReader(exampleJSON))
+	if err != nil {
+		t.Fatal(err)
 	}
-}`
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Create)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusCreated {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusCreated)
+	}
+
+	// Second, assert that calling Get returns the new resource
+	req, err = http.NewRequest("GET", "/payments/"+id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	router = mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.GetOne)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusOK)
+	}
+	var payment data.Payment
+	if err := json.NewDecoder(rr.Body).Decode(&payment); err != nil {
+		t.Fatal("unable to decode response into JSON")
+	}
+	if payment.ID != id {
+		t.Fatalf("handler returned payment with id '%s', we expected '%s'", payment.ID, id)
+	}
+	if payment.Attributes.BeneficiaryParty.AccountName != "W Owens" {
+		t.Fatalf("handler returned payment with beneficiary account name '%s', we expected 'W Owens'",
+			payment.Attributes.BeneficiaryParty.AccountName)
+	}
+}
+
+func TestCreatePaymentDuplicateID(t *testing.T) {
+	id := "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43"
+
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	// First, assert a unique resource is created
+	req, err := http.NewRequest("PUT", "/payments/"+id, strings.NewReader(exampleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Create)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusCreated {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusCreated)
+	}
+
+	// Next repeat and check it was a 400
+	req, err = http.NewRequest("PUT", "/payments/"+id, strings.NewReader(exampleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	router = mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Create)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusBadRequest)
+	}
+}
+
+func TestCreatePaymentNoID(t *testing.T) {
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	// See what happens if don't include an ID - actually this should not be possible in the real world
+	req, err := http.NewRequest("PUT", "/payments/+", strings.NewReader(exampleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(h.Create)
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusBadRequest)
+	}
+}
+
+func TestCreatePaymentEmptyBody(t *testing.T) {
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	// See what happens if we PUT without a body
+	req, err := http.NewRequest("PUT", "/payments/+", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(h.Create)
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusBadRequest)
+	}
+
+}
+
+func TestUpdatePaymentHappyPath(t *testing.T) {
+	id := "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43"
+
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	// First, assert a unique resource is created
+	req, err := http.NewRequest("PUT", "/payments/"+id, strings.NewReader(exampleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Create)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusCreated {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusCreated)
+	}
+
+	// Next update and check we get 200
+	req, err = http.NewRequest("POST", "/payments/"+id, strings.NewReader(exampleJSON2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	router = mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Update)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusOK)
+	}
+
+	// Check our change has been made
+	req, err = http.NewRequest("GET", "/payments/"+id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	router = mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.GetOne)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusOK)
+	}
+	var payment data.Payment
+	if err := json.NewDecoder(rr.Body).Decode(&payment); err != nil {
+		t.Fatal("unable to decode response into JSON")
+	}
+	if payment.ID != id {
+		t.Fatalf("handler returned payment with id '%s', we expected '%s'", payment.ID, id)
+	}
+	if payment.Attributes.BeneficiaryParty.AccountName != "Foo Bar" {
+		t.Fatalf("handler returned payment with beneficiary account name '%s', we expected 'Foo Bar'",
+			payment.Attributes.BeneficiaryParty.AccountName)
+	}
+}
+
+func TestUpdatePaymentBadRequest(t *testing.T) {
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	req, err := http.NewRequest("GET", "/payments/foobar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Update)
+	router.ServeHTTP(rr, req)
+
+	// Assert that a POST to /payments/{ID} with an invalid id returns 400
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusBadRequest)
+	}
+}
+
+func TestDeletePaymentHappyPath(t *testing.T) {
+	id := "4ee3a8d8-ca7b-4290-a52c-dd5b6165ec43"
+
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	// First, assert a unique resource is created
+	req, err := http.NewRequest("PUT", "/payments/"+id, strings.NewReader(exampleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Create)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusCreated {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusCreated)
+	}
+
+	// Next delete and check we get 200
+	req, err = http.NewRequest("DELETE", "/payments/"+id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	router = mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Delete)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusOK)
+	}
+
+	// Check our payment is gone
+	req, err = http.NewRequest("GET", "/payments/"+id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	router = mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.GetOne)
+	router.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusNotFound)
+	}
+}
+
+func TestDeletePaymentNotFound(t *testing.T) {
+	db := getTestDB(t)
+	defer cleanUp(db)
+	h := NewPayments(db)
+
+	req, err := http.NewRequest("DELETE", "/payments/foobar", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.HandleFunc("/payments/{id}", h.Delete)
+	router.ServeHTTP(rr, req)
+
+	// Assert that a DELETE to /payments/{ID} with an invalid id returns 404
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusNotFound)
+	}
+}
