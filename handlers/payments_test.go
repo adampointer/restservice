@@ -314,7 +314,7 @@ func TestUpdatePaymentBadRequest(t *testing.T) {
 	defer cleanUp(db)
 	h := NewPayments(db)
 
-	req, err := http.NewRequest("GET", "/payments/foobar", nil)
+	req, err := http.NewRequest("POST", "/payments/foobar", strings.NewReader(exampleJSON2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,9 +323,9 @@ func TestUpdatePaymentBadRequest(t *testing.T) {
 	router.HandleFunc("/payments/{id}", h.Update)
 	router.ServeHTTP(rr, req)
 
-	// Assert that a POST to /payments/{ID} with an invalid id returns 400
-	if status := rr.Code; status != http.StatusBadRequest {
-		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusBadRequest)
+	// Assert that a POST to /payments/{ID} with an invalid id returns 404
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got '%v' want '%v'", status, http.StatusNotFound)
 	}
 }
 
